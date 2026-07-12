@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+*.spec.bak
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Runtime data
+data/
+reports/
+*.db
+*.db-journal
+*.log
+
+# PyInstaller
+*.manifest
+
+# Debug scripts (temp)
+debug_*.py
+
+# TRAE internal
+.trae-cn/

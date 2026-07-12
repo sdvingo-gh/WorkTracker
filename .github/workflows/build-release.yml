@@ -1,0 +1,70 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 推送 v 开头的 tag 时触发，如 v1.0.0
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build EXE
+      run: pyinstaller worktracker.spec --clean --noconfirm
+    
+    - name: Package release
+      shell: pwsh
+      run: |
+        # 创建发布目录
+        New-Item -ItemType Directory -Force -Path release
+        # 复制 EXE
+        Copy-Item dist/WorkTracker.exe release/
+        # 复制便捷脚本
+        Copy-Item 设置开机自启.bat release/
+        Copy-Item 服务管理.bat release/
+        # 复制介绍页
+        Copy-Item worktracker-trae-contest/WorkTracker-standalone.html release/
+        # 创建 ZIP
+        Compress-Archive -Path release/* -DestinationPath WorkTracker-${{ github.ref_name }}.zip
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        name: WorkTracker ${{ github.ref_name }}
+        body: |
+          ## WorkTracker ${{ github.ref_name }}
+          
+          ### 下载使用
+          1. 下载 `WorkTracker-${{ github.ref_name }}.zip` 并解压
+          2. 双击 `WorkTracker.exe` 运行
+          3. 浏览器自动打开 http://127.0.0.1:5678
+          4. 点击「启动监控」开始使用
+          
+          ### 功能
+          - 全自动桌面活动追踪
+          - AI 智能任务识别
+          - 一键生成工作日报
+          - OA 系统对接
+          - 开机自启
+        files: |
+          WorkTracker-${{ github.ref_name }}.zip
+          dist/WorkTracker.exe
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

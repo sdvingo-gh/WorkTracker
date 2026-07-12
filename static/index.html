@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>WorkTracker - 工作监控面板</title>
+    <style>
+        :root{--primary:#2563eb;--primary-light:#dbeafe;--success:#16a34a;--danger:#dc2626;--warning:#f59e0b;
+        --bg:#0f172a;--bg-card:#1e293b;--bg-card2:#334155;--text:#f1f5f9;--text2:#94a3b8;--border:#475569;--radius:12px}
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+            background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+        .app{display:flex;height:100vh}
+        
+        /* 侧边栏 */
+        .sidebar{width:220px;background:#0c1222;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+        .sidebar .logo{padding:24px 20px;border-bottom:1px solid var(--border)}
+        .sidebar .logo h1{font-size:20px;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;
+            -webkit-text-fill-color:transparent;font-weight:700}
+        .sidebar .logo p{font-size:11px;color:var(--text2);margin-top:4px}
+        .sidebar nav{flex:1;padding:12px}
+        .nav-item{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:8px;cursor:pointer;
+            color:var(--text2);font-size:14px;transition:all .2s;margin-bottom:4px}
+        .nav-item:hover{background:var(--bg-card);color:var(--text)}
+        .nav-item.active{background:var(--primary);color:#fff}
+        .nav-item .icon{font-size:18px;width:24px;text-align:center}
+        
+        /* 主内容区 */
+        .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+        .topbar{height:60px;background:#0c1222;border-bottom:1px solid var(--border);display:flex;
+            align-items:center;justify-content:space-between;padding:0 24px;flex-shrink:0}
+        .topbar .status{display:flex;align-items:center;gap:12px}
+        .status-dot{width:10px;height:10px;border-radius:50%;background:var(--danger)}
+        .status-dot.running{background:var(--success);animation:pulse 2s infinite}
+        .status-dot.paused{background:var(--warning);animation:pulse 2s infinite}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+        .status-text{font-size:13px;color:var(--text2)}
+        .topbar .time{font-size:14px;color:var(--text2);font-variant-numeric:tabular-nums}
+        .content{flex:1;overflow-y:auto;padding:24px}
+        
+        /* 控制按钮 */
+        .controls{display:flex;gap:10px;margin-bottom:24px}
+        .btn{padding:10px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;
+            transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+        .btn:disabled{opacity:.4;cursor:not-allowed}
+        .btn-start{background:var(--success);color:#fff}
+        .btn-start:hover:not(:disabled){background:#15803d}
+        .btn-pause{background:var(--warning);color:#000}
+        .btn-pause:hover:not(:disabled){background:#d97706}
+        .btn-stop{background:var(--danger);color:#fff}
+        .btn-stop:hover:not(:disabled){background:#b91c1c}
+        .btn-secondary{background:var(--bg-card2);color:var(--text)}
+        .btn-secondary:hover:not(:disabled){background:#475569}
+        
+        /* 统计卡片 */
+        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px}
+        .stat-card{background:var(--bg-card);border-radius:var(--radius);padding:20px;border:1px solid var(--border)}
+        .stat-card .label{font-size:12px;color:var(--text2);margin-bottom:8px}
+        .stat-card .value{font-size:28px;font-weight:700;color:var(--primary)}
+        .stat-card .sub{font-size:12px;color:var(--text2);margin-top:4px}
+        
+        /* 卡片面板 */
+        .panel{background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border);margin-bottom:20px}
+        .panel-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+        .panel-header h2{font-size:15px;font-weight:600}
+        .panel-body{padding:16px 20px}
+        
+        /* 表格 */
+        table{width:100%;border-collapse:collapse}
+        th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid var(--border)}
+        th{color:var(--text2);font-weight:500;font-size:12px;text-transform:uppercase}
+        tr:hover td{background:rgba(255,255,255,.03)}
+        
+        /* 进度条 */
+        .bar-wrap{height:8px;background:var(--bg);border-radius:4px;overflow:hidden;margin-top:6px}
+        .bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,#667eea,#764ba2);transition:width .5s}
+        
+        /* 设置表单 */
+        .form-group{margin-bottom:20px}
+        .form-group label{display:block;font-size:13px;color:var(--text2);margin-bottom:6px}
+        .form-group input,.form-group select,.form-group textarea{width:100%;padding:10px 14px;background:var(--bg);
+            border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px}
+        .form-group input:focus,.form-group select:focus{outline:none;border-color:var(--primary)}
+        .form-hint{font-size:11px;color:var(--text2);margin-top:4px}
+        
+        /* 时间线 */
+        .timeline{position:relative;padding-left:24px}
+        .timeline::before{content:'';position:absolute;left:7px;top:0;bottom:0;width:2px;background:var(--border)}
+        .tl-item{position:relative;margin-bottom:16px;padding-left:20px}
+        .tl-item::before{content:'';position:absolute;left:-21px;top:4px;width:12px;height:12px;
+            border-radius:50%;background:var(--primary);border:2px solid var(--bg-card)}
+        .tl-item.idle::before{background:var(--text2)}
+        .tl-item .tl-time{font-size:12px;color:var(--text2);margin-bottom:2px}
+        .tl-item .tl-title{font-size:14px;font-weight:500}
+        .tl-item .tl-meta{font-size:12px;color:var(--text2);display:flex;gap:12px;margin-top:2px}
+        .tl-item.idle .tl-title{color:var(--text2)}
+        
+        /* 隐藏页面 */
+        .page{display:none}
+        .page.active{display:block}
+        
+        /* 标签 */
+        .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+        .tag-dev{background:#1e3a5f;color:#60a5fa}
+        .tag-browser{background:#1e3a2f;color:#4ade80}
+        .tag-chat{background:#3b1f2b;color:#f472b6}
+        .tag-idle{background:#374151;color:#9ca3af}
+        .tag-other{background:#374151;color:#9ca3af}
+        
+        /* Toast */
+        .toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;
+            z-index:9999;transform:translateX(120%);transition:transform .3s}
+        .toast.show{transform:translateX(0)}
+        .toast-success{background:var(--success);color:#fff}
+        .toast-error{background:var(--danger);color:#fff}
+        .toast-info{background:var(--primary);color:#fff}
+        
+        /* 刷新动画 */
+        .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--text2);border-top-color:var(--primary);
+            border-radius:50%;animation:spin .8s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="sidebar">
+        <div class="logo">
+            <h1>WorkTracker</h1>
+            <p>桌面活动监控工具</p>
+        </div>
+        <nav>
+            <div class="nav-item active" onclick="showPage('dashboard')">
+                <span class="icon">&#9632;</span> 控制面板
+            </div>
+            <div class="nav-item" onclick="showPage('history')">
+                <span class="icon">&#9776;</span> 历史日志
+            </div>
+            <div class="nav-item" onclick="showPage('reports')">
+                <span class="icon">&#9998;</span> 日报生成
+            </div>
+            <div class="nav-item" onclick="showPage('oa')">
+                <span class="icon">&#10148;</span> 提交OA
+            </div>
+            <div class="nav-item" onclick="showPage('settings')">
+                <span class="icon">&#9881;</span> 参数设置
+            </div>
+        </nav>
+    </div>
+    
+    <div class="main">
+        <div class="topbar">
+            <div class="status">
+                <div class="status-dot" id="statusDot"></div>
+                <span class="status-text" id="statusText">未启动</span>
+            </div>
+            <div class="time" id="clock"></div>
+        </div>
+        
+        <div class="content">
+            <!-- ========== 控制面板 ========== -->
+            <div class="page active" id="page-dashboard">
+                <div class="controls">
+                    <button class="btn btn-start" id="btnStart" onclick="startMonitor()">&#9654; 启动监控</button>
+                    <button class="btn btn-pause" id="btnPause" onclick="pauseMonitor()" disabled>&#10074;&#10074; 暂停</button>
+                    <button class="btn btn-stop" id="btnStop" onclick="stopMonitor()" disabled>&#9632; 停止</button>
+                    <button class="btn btn-secondary" onclick="refreshDashboard()">&#8635; 刷新</button>
+                </div>
+                
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="label">今日工作时长</div>
+                        <div class="value" id="statActive">0分钟</div>
+                        <div class="sub">有效工作时间</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">空闲时长</div>
+                        <div class="value" id="statIdle">0分钟</div>
+                        <div class="sub">未操作时间</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">当前活动</div>
+                        <div class="value" id="statCurrent" style="font-size:14px">--</div>
+                        <div class="sub" id="statCurrentSub">等待启动</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">切换次数</div>
+                        <div class="value" id="statSwitches">0</div>
+                        <div class="sub">窗口切换</div>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header"><h2>今日类别分布</h2></div>
+                    <div class="panel-body" id="categoryBars">暂无数据</div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header"><h2>应用使用排行</h2></div>
+                    <div class="panel-body">
+                        <table>
+                            <thead><tr><th>排名</th><th>应用</th><th>类别</th><th>时长</th><th>占比</th></tr></thead>
+                            <tbody id="appTable"><tr><td colspan="5" style="text-align:center;color:var(--text2)">暂无数据</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="panel">
+                    <div class="panel-header"><h2>实时活动时间线</h2></div>
+                    <div class="panel-body" id="timeline"><div style="text-align:center;color:var(--text2)">暂无数据</div></div>
+                </div>
+            </div>
+            
+            <!-- ========== 历史日志 ========== -->
+            <div class="page" id="page-history">
+                <div class="controls">
+                    <label style="font-size:13px;color:var(--text2);margin-right:8px">选择日期：</label>
+                    <input type="date" id="historyDate" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+                        border-radius:6px;color:var(--text);font-size:14px" onchange="loadHistory()">
+                    <button class="btn btn-secondary" onclick="loadHistory()">&#8635; 加载</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>活动记录明细</h2></div>
+                    <div class="panel-body">
+                        <table>
+                            <thead><tr><th>开始</th><th>结束</th><th>时长</th><th>窗口标题</th><th>进程</th><th>类别</th></tr></thead>
+                            <tbody id="historyTable"><tr><td colspan="6" style="text-align:center;color:var(--text2)">请选择日期</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>日期列表</h2></div>
+                    <div class="panel-body" id="dateList">加载中...</div>
+                </div>
+            </div>
+            
+            <!-- ========== 日报生成 ========== -->
+            <div class="page" id="page-reports">
+                <div class="controls">
+                    <button class="btn btn-start" onclick="genReport('today')">&#9998; 生成今日日报</button>
+                    <button class="btn btn-secondary" onclick="genReport('weekly')">&#9998; 生成周报</button>
+                    <label style="font-size:13px;color:var(--text2);margin-left:12px">指定日期：</label>
+                    <input type="date" id="reportDate" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+                        border-radius:6px;color:var(--text);font-size:14px">
+                    <button class="btn btn-secondary" onclick="genReport('date')">生成</button>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>日报列表</h2></div>
+                    <div class="panel-body" id="reportList">加载中...</div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>数据管理</h2></div>
+                    <div class="panel-body">
+                        <button class="btn btn-stop" onclick="clearToday()" style="margin-right:12px">&#128465; 清除今日数据</button>
+                        <span style="font-size:12px;color:var(--text2)">清除后不可恢复，请谨慎操作</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- ========== 提交OA ========== -->
+            <div class="page" id="page-oa">
+                <div class="stats-row" style="grid-template-columns:repeat(3,1fr)">
+                    <div class="stat-card">
+                        <div class="label">OA填写状态</div>
+                        <div class="value" id="oaStatus" style="font-size:14px">未启动</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">当前步骤</div>
+                        <div class="value" id="oaStep" style="font-size:14px">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">操作提示</div>
+                        <div class="value" id="oaMsg" style="font-size:12px">请先预览日报并配置OA</div>
+                    </div>
+                </div>
+
+                <!-- OA配置 -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <h2>OA系统配置（泛微）</h2>
+                        <button class="btn btn-secondary" onclick="saveOAConfig()" style="padding:6px 14px;font-size:12px">保存配置</button>
+                    </div>
+                    <div class="panel-body">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                            <div class="form-group">
+                                <label>OA日报提报页面URL</label>
+                                <input type="text" id="oaUrl" placeholder="https://oa.company.com/workflow/...">
+                                <div class="form-hint">泛微OA日报流程的新建页面地址</div>
+                            </div>
+                            <div class="form-group">
+                                <label>日期字段标识</label>
+                                <input type="text" id="oaDateField" placeholder="field0001 或 CSS选择器">
+                                <div class="form-hint">日报日期输入框的ID或选择器（打开F12开发者工具查看）</div>
+                            </div>
+                            <div class="form-group">
+                                <label>工作摘要字段</label>
+                                <input type="text" id="oaSummaryField" placeholder="field0002">
+                                <div class="form-hint">工作内容摘要的输入框ID</div>
+                            </div>
+                            <div class="form-group">
+                                <label>工作详情字段</label>
+                                <input type="text" id="oaDetailField" placeholder="field0003">
+                                <div class="form-hint">详细工作记录的文本框ID</div>
+                            </div>
+                            <div class="form-group">
+                                <label>工时范围字段</label>
+                                <input type="text" id="oaTimeField" placeholder="field0004">
+                                <div class="form-hint">工作时间段（如 09:00-18:00）</div>
+                            </div>
+                            <div class="form-group">
+                                <label>总工时字段</label>
+                                <input type="text" id="oaHoursField" placeholder="field0005">
+                                <div class="form-hint">总工作时长</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 日报预览编辑 -->
+                <div class="controls">
+                    <label style="font-size:13px;color:var(--text2);margin-right:8px">预览日期：</label>
+                    <input type="date" id="oaDate" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);
+                        border-radius:6px;color:var(--text);font-size:14px">
+                    <button class="btn btn-secondary" onclick="previewOAReport()">&#8635; 加载日报</button>
+                </div>
+
+                <div class="panel">
+                    <div class="panel-header"><h2>日报内容预览（可编辑修改后提交）</h2></div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label>工作摘要</label>
+                            <textarea id="oaSummary" rows="5" style="width:100%;padding:10px;background:var(--bg);
+                                border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;
+                                resize:vertical;font-family:inherit" placeholder="自动生成的工作摘要，可手动修改..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>工作详情</label>
+                            <textarea id="oaDetail" rows="8" style="width:100%;padding:10px;background:var(--bg);
+                                border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;
+                                resize:vertical;font-family:inherit" placeholder="详细工作记录..."></textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+                            <div class="form-group">
+                                <label>日期</label>
+                                <input type="text" id="oaReportDate" style="padding:10px;background:var(--bg);
+                                    border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>工作时段</label>
+                                <input type="text" id="oaReportTime" style="padding:10px;background:var(--bg);
+                                    border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" readonly>
+                            </div>
+                            <div class="form-group">
+                                <label>总工时</label>
+                                <input type="text" id="oaReportHours" style="padding:10px;background:var(--bg);
+                                    border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px" readonly>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:12px">
+                            <button class="btn btn-start" onclick="submitToOA()" style="font-size:15px;padding:14px 32px">
+                                &#10148; 一键提交到OA系统
+                            </button>
+                            <span style="font-size:12px;color:var(--text2);line-height:46px">提交后会自动打开浏览器填写，请最终核对后手动点击OA提交按钮</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== 参数设置 ========== -->
+            <div class="page" id="page-settings">
+                <div class="panel">
+                    <div class="panel-header"><h2>监控参数</h2></div>
+                    <div class="panel-body">
+                        <div class="form-group">
+                            <label>监控间隔（秒）</label>
+                            <input type="number" id="setInterval" min="5" max="300">
+                            <div class="form-hint">检测活动窗口的频率，建议 10-30 秒，值越小越精确但越耗资源</div>
+                        </div>
+                        <div class="form-group">
+                            <label>最小记录时长（秒）</label>
+                            <input type="number" id="setMinDuration" min="5" max="600">
+                            <div class="form-hint">低于此时长的活动将被忽略，建议 30-120 秒</div>
+                        </div>
+                        <div class="form-group">
+                            <label>空闲阈值（秒）</label>
+                            <input type="number" id="setIdle" min="60" max="3600">
+                            <div class="form-hint">无操作多久视为空闲，默认 600 秒（10分钟）</div>
+                        </div>
+                        <button class="btn btn-start" onclick="saveSettings()">&#128190; 保存设置</button>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header"><h2>关于</h2></div>
+                    <div class="panel-body" style="color:var(--text2);font-size:13px;line-height:2">
+                        WorkTracker v1.0<br>
+                        桌面活动监控与日报自动生成工具<br>
+                        数据存储位置：<span id="dataPath">--</span><br>
+                        日报输出位置：<span id="reportPath">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ==================== 全局状态 ====================
+
+// ==================== 页面切换 ====================
+function showPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.getElementById('page-' + name).classList.add('active');
+    event.currentTarget.classList.add('active');
+    if (name === 'history') { loadDates(); loadHistory(); }
+    if (name === 'reports') { loadReportList(); }
+    if (name === 'settings') { loadSettings(); }
+}
+
+// ==================== Toast提示 ====================
+function toast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = 'toast toast-' + type + ' show';
+    setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ==================== 时钟 ====================
+function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toLocaleString('zh-CN');
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ==================== 监控控制 ====================
+async function startMonitor() {
+    const r = await fetch('/api/start', {method:'POST'});
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+    updateStatus();
+}
+
+async function pauseMonitor() {
+    const r = await fetch('/api/pause', {method:'POST'});
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+    updateStatus();
+}
+
+async function stopMonitor() {
+    const r = await fetch('/api/stop', {method:'POST'});
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+    updateStatus();
+}
+
+async function updateStatus() {
+    const r = await fetch('/api/status');
+    const d = await r.json();
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    dot.className = 'status-dot';
+    
+    if (d.running && !d.paused) {
+        dot.classList.add('running');
+        txt.textContent = '监控中';
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnPause').disabled = false;
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnPause').innerHTML = '&#10074;&#10074; 暂停';
+    } else if (d.running && d.paused) {
+        dot.classList.add('paused');
+        txt.textContent = '已暂停';
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnPause').disabled = false;
+        document.getElementById('btnStop').disabled = false;
+        document.getElementById('btnPause').innerHTML = '&#9654; 恢复';
+    } else {
+        txt.textContent = '未启动';
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnPause').disabled = true;
+        document.getElementById('btnStop').disabled = true;
+    }
+    
+    // 当前活动 - 优先展示解析后的上下文
+    if (d.current_activity) {
+        const ca = d.current_activity;
+        let mainText = '';
+        let subText = '';
+
+        if (ca.context && ca.context !== ca.window_title) {
+            // 有解析结果：展示具体做什么
+            mainText = ca.context.substring(0, 25);
+            subText = (ca.window_title || '').substring(0, 30);
+        } else if (ca.file_name) {
+            mainText = ca.file_name.substring(0, 20);
+            subText = (ca.project_name || ca.window_title || '').substring(0, 25);
+        } else {
+            mainText = (ca.process_name || '--').substring(0, 15);
+            subText = (ca.window_title || '--').substring(0, 25);
+        }
+        document.getElementById('statCurrent').textContent = mainText;
+        document.getElementById('statCurrentSub').textContent = subText;
+    } else {
+        document.getElementById('statCurrent').textContent = '--';
+        document.getElementById('statCurrentSub').textContent = '等待启动';
+    }
+}
+
+// ==================== 仪表盘数据 ====================
+async function refreshDashboard() {
+    await updateStatus();
+    try {
+        const [statsRes, actRes] = await Promise.all([
+            fetch('/api/today-stats'), fetch('/api/today-activities')
+        ]);
+        const stats = await statsRes.json();
+        const acts = await actRes.json();
+        
+        // 统计卡片
+        document.getElementById('statActive').textContent = fmtDur(stats.active_seconds || 0);
+        document.getElementById('statIdle').textContent = fmtDur(stats.idle_seconds || 0);
+        document.getElementById('statSwitches').textContent = acts.filter(a => !a.is_idle).length;
+        
+        // 类别分布
+        renderCategories(stats.categories || []);
+        
+        // 应用排行
+        renderAppTable(stats.top_apps || [], stats.active_seconds || 0);
+        
+        // 时间线
+        renderTimeline(acts);
+    } catch(e) { console.error(e); }
+}
+
+function fmtDur(s) {
+    if (s < 60) return s + '秒';
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return h > 0 ? h + '小时' + m + '分钟' : m + '分钟';
+}
+
+function renderCategories(cats) {
+    const el = document.getElementById('categoryBars');
+    if (!cats.length) { el.innerHTML = '暂无数据'; return; }
+    const total = cats.reduce((s, c) => s + c.seconds, 0) || 1;
+    const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#ec4899','#06b6d4'];
+    el.innerHTML = cats.map((c, i) => {
+        const pct = Math.round(c.seconds / total * 100);
+        return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">' +
+            '<span>' + c.category + '</span><span style="color:var(--text2)">' + fmtDur(c.seconds) + ' (' + pct + '%)</span></div>' +
+            '<div class="bar-wrap"><div class="bar-fill" style="width:' + pct + '%;background:' + colors[i % colors.length] + '"></div></div></div>';
+    }).join('');
+}
+
+function renderAppTable(apps, total) {
+    const el = document.getElementById('appTable');
+    if (!apps.length) { el.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text2)">暂无数据</td></tr>'; return; }
+    el.innerHTML = apps.slice(0, 15).map((a, i) => {
+        const pct = total > 0 ? Math.round(a.seconds / total * 100) : 0;
+        return '<tr><td>' + (i+1) + '</td><td>' + a.process + '</td><td>' + (a.title || '').substring(0, 20) + '</td>' +
+            '<td>' + fmtDur(a.seconds) + '</td><td><div class="bar-wrap" style="width:80px;display:inline-block;vertical-align:middle">' +
+            '<div class="bar-fill" style="width:' + pct + '%"></div></div> ' + pct + '%</td></tr>';
+    }).join('');
+}
+
+function renderTimeline(acts) {
+    const el = document.getElementById('timeline');
+    if (!acts.length) { el.innerHTML = '<div style="text-align:center;color:var(--text2)">暂无数据</div>'; return; }
+
+    // 合并同类（按进程名+应用类型）
+    const merged = [];
+    acts.forEach(a => {
+        if (a.is_idle && (!a.end_time || a.duration < 60)) return;
+        const start = a.start_time ? a.start_time.substring(11, 16) : '--';
+        const end = a.end_time ? a.end_time.substring(11, 16) : '进行中';
+        const last = merged[merged.length - 1];
+        if (last && last.process === a.process_name && !last.idle && !a.is_idle) {
+            last.end = end;
+            last.seconds += a.duration;
+        } else {
+            merged.push({
+                start, end,
+                title: a.window_title,
+                process: a.process_name,
+                category: a.category,
+                seconds: a.duration,
+                idle: a.is_idle,
+                file_name: a.file_name,
+                project_name: a.project_name,
+                context: a.context,
+                app_type: a.app_type
+            });
+        }
+    });
+
+    el.innerHTML = '<div class="timeline">' + merged.slice(-30).reverse().map(m => {
+        // 构建丰富标题：优先用屏幕分析的上下文
+        let titleHtml = '';
+        let detailHtml = '';
+
+        if (m.idle) {
+            titleHtml = '空闲 / 离开';
+        } else if (m.context && m.context !== m.title) {
+            titleHtml = m.context.substring(0, 60);
+        } else {
+            titleHtml = (m.title || '--').substring(0, 60);
+        }
+
+        // app_context 作为补充信息
+        if (m.app_context) {
+            detailHtml = '<span style="color:var(--text2)">' + m.app_context.substring(0, 50) + '</span>';
+        } else if (m.title) {
+            detailHtml = '<span style="color:var(--text2)">' + m.title.substring(0, 40) + '</span>';
+        }
+
+        // 类型标签 - 优先用屏幕分析的task_type
+        let cat = m.category || '其他';
+        let tagClass = 'tag-other';
+        if (cat.includes('编码') || cat.includes('开发')) tagClass = 'tag-dev';
+        else if (cat.includes('浏览')) tagClass = 'tag-browser';
+        else if (cat.includes('沟通') || cat.includes('通讯')) tagClass = 'tag-idle';
+        else if (cat.includes('文档')) tagClass = 'tag-doc';
+
+        let typeTag = '<span class="tag ' + tagClass + '" style="margin-left:6px">' + cat + '</span>';
+
+        // 关键词标签
+        let kwTags = '';
+        if (m.keywords) {
+            let kws = m.keywords.split(',').filter(k => k.trim()).slice(0, 4);
+            kwTags = kws.map(k => '<span class="tag" style="margin-left:4px;background:var(--bg);border:1px solid var(--border);font-size:11px;padding:1px 6px;border-radius:10px;color:var(--text2)">' + k + '</span>').join('');
+        }
+
+        // 置信度
+        let confTag = '';
+        if (m.task_confidence > 0.3) {
+            confTag = '<span style="font-size:10px;color:var(--text2);margin-left:6px">' + Math.round(m.task_confidence * 100) + '%</span>';
+        }
+
+        return '<div class="tl-item' + (m.idle ? ' idle' : '') + '">' +
+            '<div class="tl-time">' + m.start + ' - ' + m.end + '</div>' +
+            '<div class="tl-title">' + titleHtml + typeTag + kwTags + confTag + '</div>' +
+            '<div class="tl-meta">' +
+            '<span>' + m.process + '</span>' +
+            (detailHtml ? '<span>' + detailHtml + '</span>' : '') +
+            '<span style="color:var(--primary)">' + fmtDur(m.seconds) + '</span>' +
+            '</div></div>';
+    }).join('') + '</div>';
+}
+
+// ==================== 历史日志 ====================
+async function loadDates() {
+    const r = await fetch('/api/dates');
+    const dates = await r.json();
+    const el = document.getElementById('dateList');
+    if (!dates.length) { el.innerHTML = '<div style="color:var(--text2)">暂无记录</div>'; return; }
+    el.innerHTML = dates.map(function(d) {
+        return '<span class="tag tag-other" style="cursor:pointer;margin:4px;padding:6px 14px;border-radius:6px" ' +
+            'onclick="document.getElementById(&quot;historyDate&quot;).value=&quot;' + d + '&quot;;loadHistory()">' + d + '</span>';
+    }).join('');
+}
+
+async function loadHistory() {
+    const dateStr = document.getElementById('historyDate').value;
+    if (!dateStr) return;
+    const r = await fetch('/api/activities/' + dateStr);
+    const acts = await r.json();
+    const el = document.getElementById('historyTable');
+    if (!acts.length) { el.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text2)">无记录</td></tr>'; return; }
+    el.innerHTML = acts.map(a => {
+        const start = a.start_time ? a.start_time.substring(11, 16) : '--';
+        const end = a.end_time ? a.end_time.substring(11, 16) : '--';
+        // 优先显示解析后的上下文，其次显示窗口标题
+        let displayTitle = '';
+        if (a.context && a.context !== a.window_title) {
+            displayTitle = a.context.substring(0, 35) +
+                '<br><span style="color:var(--text2);font-size:11px">' + (a.window_title || '').substring(0, 30) + '</span>';
+        } else {
+            displayTitle = (a.window_title || '--').substring(0, 35);
+        }
+        // 类型标签
+        let typeTag = '';
+        if (a.app_type === 'editor') typeTag = '<span class="tag tag-dev">编辑器</span>';
+        else if (a.app_type === 'browser') typeTag = '<span class="tag tag-browser">浏览器</span>';
+        else if (a.app_type === 'chat') typeTag = '<span class="tag tag-idle">通讯</span>';
+        else if (a.app_type === 'office') typeTag = '<span class="tag tag-other">办公</span>';
+
+        return '<tr' + (a.is_idle ? ' style="opacity:.5"' : '') + '><td>' + start + '</td><td>' + end + '</td>' +
+            '<td>' + fmtDur(a.duration) + '</td>' +
+            '<td>' + displayTitle + '</td>' +
+            '<td>' + a.process_name + '<br>' + typeTag + '</td>' +
+            '<td>' + a.category + '</td></tr>';
+    }).join('');
+}
+
+// ==================== 日报生成 ====================
+async function genReport(type) {
+    let url;
+    if (type === 'today') url = '/api/report/today';
+    else if (type === 'weekly') url = '/api/report/weekly';
+    else {
+        const d = document.getElementById('reportDate').value;
+        if (!d) { toast('请选择日期', 'error'); return; }
+        url = '/api/report/' + d;
+    }
+    const r = await fetch(url, {method:'POST'});
+    const d = await r.json();
+    if (d.success) {
+        toast('日报已生成，正在打开...', 'success');
+        window.open(d.url, '_blank');
+    } else {
+        toast(d.message || '生成失败', 'error');
+    }
+    loadReportList();
+}
+
+async function loadReportList() {
+    const el = document.getElementById('reportList');
+    try {
+        const r = await fetch('/api/dates');
+        const dates = await r.json();
+        if (!dates.length) { el.innerHTML = '<div style="color:var(--text2)">暂无报告</div>'; return; }
+        el.innerHTML = '<div style="display:flex;flex-wrap:wrap;gap:8px">' + dates.map(function(d) {
+            return '<span class="tag tag-dev" style="cursor:pointer;padding:6px 14px;border-radius:6px" ' +
+                'onclick="genReportDirect(&quot;' + d + '&quot;)">' + d + '</span>';
+        }).join('') + '</div>';
+    } catch(e) { el.innerHTML = '<div style="color:var(--text2)">加载失败</div>'; }
+}
+
+async function genReportDirect(d) {
+    const r = await fetch('/api/report/' + d, {method:'POST'});
+    const data = await r.json();
+    if (data.success) window.open(data.url, '_blank');
+    else toast(data.message || '生成失败', 'error');
+}
+
+async function clearToday() {
+    if (!confirm('确认清除今日所有监控数据？此操作不可恢复！')) return;
+    const r = await fetch('/api/clear-today', {method:'POST'});
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+    refreshDashboard();
+}
+
+// ==================== 参数设置 ====================
+async function loadSettings() {
+    try {
+        const r = await fetch('/api/settings');
+        const s = await r.json();
+        document.getElementById('setInterval').value = s.monitor_interval;
+        document.getElementById('setMinDuration').value = s.min_duration;
+        document.getElementById('setIdle').value = s.idle_threshold;
+        document.getElementById('dataPath').textContent = s.data_dir || '--';
+        document.getElementById('reportPath').textContent = s.report_dir || '--';
+    } catch(e) {}
+}
+
+async function saveSettings() {
+    const data = {
+        monitor_interval: parseInt(document.getElementById('setInterval').value),
+        min_duration: parseInt(document.getElementById('setMinDuration').value),
+        idle_threshold: parseInt(document.getElementById('setIdle').value)
+    };
+    const r = await fetch('/api/settings', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(data)
+    });
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+}
+
+// ==================== OA 提交 ====================
+async function loadOAConfig() {
+    try {
+        const r = await fetch('/api/oa/config');
+        const cfg = await r.json();
+        document.getElementById('oaUrl').value = cfg.oa_url || '';
+        const fm = cfg.field_mapping || {};
+        document.getElementById('oaDateField').value = fm.date_field || '';
+        document.getElementById('oaSummaryField').value = fm.summary_field || '';
+        document.getElementById('oaDetailField').value = fm.detail_field || '';
+        document.getElementById('oaTimeField').value = fm.time_field || '';
+        document.getElementById('oaHoursField').value = fm.hours_field || '';
+    } catch(e) {}
+}
+
+async function saveOAConfig() {
+    const config = {
+        oa_url: document.getElementById('oaUrl').value,
+        field_mapping: {
+            date_field: document.getElementById('oaDateField').value,
+            summary_field: document.getElementById('oaSummaryField').value,
+            detail_field: document.getElementById('oaDetailField').value,
+            time_field: document.getElementById('oaTimeField').value,
+            hours_field: document.getElementById('oaHoursField').value
+        }
+    };
+    const r = await fetch('/api/oa/config', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(config)
+    });
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+}
+
+async function previewOAReport() {
+    const dateStr = document.getElementById('oaDate').value;
+    if (!dateStr) { toast('请选择日期', 'error'); return; }
+    try {
+        const r = await fetch('/api/oa/preview?date=' + dateStr);
+        const report = await r.json();
+        
+        document.getElementById('oaReportDate').value = report.date + ' ' + report.weekday;
+        document.getElementById('oaReportTime').value = report.work_time_range;
+        document.getElementById('oaReportHours').value = report.total_work_hours;
+        document.getElementById('oaSummary').value = report.summary || '';
+        
+        // 详情
+        const details = report.detail_items || [];
+        let detailText = details.map(i => i.time + ' ' + i.content + '（' + i.duration + '）').join('\n');
+        detailText += '\n\n' + (report.category_summary || '');
+        document.getElementById('oaDetail').value = detailText;
+        
+        toast('日报已加载，可编辑修改后提交', 'success');
+    } catch(e) {
+        toast('加载失败: ' + e.message, 'error');
+    }
+}
+
+async function submitToOA() {
+    const summary = document.getElementById('oaSummary').value.trim();
+    const detail = document.getElementById('oaDetail').value.trim();
+    if (!summary) { toast('日报内容为空，请先加载日报', 'error'); return; }
+    
+    const dateStr = document.getElementById('oaDate').value;
+    
+    // 构建编辑后的日报数据
+    const editedReport = {
+        date: document.getElementById('oaReportDate').value,
+        work_time_range: document.getElementById('oaReportTime').value,
+        total_work_hours: document.getElementById('oaReportHours').value,
+        summary: summary,
+        detail_items: []
+    };
+    
+    // 解析配置
+    const config = {
+        oa_url: document.getElementById('oaUrl').value,
+        field_mapping: {
+            date_field: document.getElementById('oaDateField').value,
+            summary_field: document.getElementById('oaSummaryField').value,
+            detail_field: document.getElementById('oaDetailField').value,
+            time_field: document.getElementById('oaTimeField').value,
+            hours_field: document.getElementById('oaHoursField').value
+        }
+    };
+    
+    const r = await fetch('/api/oa/submit', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({date: dateStr, config: config, report: editedReport})
+    });
+    const d = await r.json();
+    toast(d.message, d.success ? 'success' : 'error');
+    
+    if (d.success) {
+        document.getElementById('oaStatus').textContent = '填写中...';
+        document.getElementById('oaStep').textContent = '已启动浏览器';
+        pollOAStatus();
+    }
+}
+
+function pollOAStatus() {
+    const poll = setInterval(async () => {
+        try {
+            const r = await fetch('/api/oa/status');
+            const d = await r.json();
+            document.getElementById('oaStep').textContent = d.status;
+            document.getElementById('oaMsg').textContent = d.message;
+            
+            if (d.status === 'done' || d.status === 'error' || d.status === 'idle') {
+                document.getElementById('oaStatus').textContent = d.status === 'done' ? '填写完成' : d.status;
+                clearInterval(poll);
+            } else {
+                document.getElementById('oaStatus').textContent = '进行中';
+            }
+        } catch(e) { clearInterval(poll); }
+    }, 2000);
+}
+
+// ==================== 自动刷新（递归setTimeout，防被外部脚本清除） ====================
+let _refreshRunning = true;
+
+function scheduleRefresh() {
+    setTimeout(async function() {
+        if (!_refreshRunning) return;
+        try { await refreshDashboard(); } catch(e) { console.error('refresh error:', e); }
+        scheduleRefresh();
+    }, 5000);
+}
+
+// 检测页面可见性，切回时立即刷新
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && document.getElementById('page-dashboard').classList.contains('active')) {
+        refreshDashboard();
+    }
+});
+
+// ==================== 初始化 ====================
+document.getElementById('historyDate').valueAsDate = new Date();
+document.getElementById('reportDate').valueAsDate = new Date();
+document.getElementById('oaDate').valueAsDate = new Date();
+loadOAConfig();
+updateStatus();
+refreshDashboard();
+scheduleRefresh();
+</script>
+</body>
+</html>
